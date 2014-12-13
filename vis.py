@@ -6,77 +6,97 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
-#create initial window parameters
+#create initial window parameters and camera values
 width = 500
 height = 500
 spin_bool = True
 (view_rotx,view_roty,view_rotz,view_zoom)=(20.0, 30.0, 0.0,1.0)
-#fetch PDB data
-id = raw_input("Please enter a protein ID string: ")
-filename = fetchPDB(id)
-atoms = parsePDB(filename)
-coords = atoms.getCoords()
-poly = False
-line = False
-#max/mins
+maxX = 0
+maxY = 0
+maxZ = 0
+minX = 0
+minY = 0
+minZ = 0
+meanX = 0
+meanY = 0
+meanZ = 0
+coords = [0][0]
 
-class Stats(object):
-    maxX = coords[0][0]
-    maxY = coords[0][1]
-    maxZ = coords[0][2]
-    minX = maxX-1
-    minY = maxY-1
-    minZ = maxZ-1
-    meanX = 0
-    meanY = 0
-    meanZ = 0
+class Args(object):
+    poly = False
+    line = False
+    seq = ""
+    id = ""
+    isSeq = False
+
+def getAtoms(id):
+    try:
+      filename = fetchPDB(id)
+      atoms = parsePDB(filename)
+      if(Args.isSeq):
+        sequence(atoms.select("sequence "+Args.seq))
+      #coords = atoms.getCoords()
+    except TypeError:
+      print "Error: invalid ID. Try -h for help."
+      sys.exit(2)
+    return atoms;
 
 def Scale():
-#find max and min for each range
+    global maxX, maxY, maxZ, minX, minY, minZ, meanX, meanY, meanZ, atoms, coords;
+    #find max and min for each range
+    coords = atoms.getCoords()
     for a in coords:
-        #print(a[2])
-        if(a[0] < Stats.minX):
-            Stats.minX = a[0]
-        elif(a[0] > Stats.maxX):
-            Stats.maxX = a[0]
-        if(a[1] < Stats.minY):
-            Stats.minY = a[1]
-        elif(a[1] > Stats.maxY):
-            Stats.maxY = a[1]
-        if(a[2] < Stats.minZ):
-            Stats.minZ = a[2]
-        elif(a[2] > Stats.maxZ):
-            Stats.maxZ = a[2]
+	#print(a[2])
+	if(a[0] < minX):
+	    minX = a[0]
+	elif(a[0] > maxX):
+	    maxX = a[0]
+	if(a[1] < minY):
+	    minY = a[1]
+	elif(a[1] > maxY):
+	    maxY = a[1]
+	if(a[2] < minZ):
+	    minZ = a[2]
+	elif(a[2] > maxZ):
+	    maxZ = a[2]
     #multiply projection matrix
-    quoX = Stats.maxX - Stats.minX
-    quoY = Stats.maxY - Stats.minY
-    quoZ = Stats.maxZ - Stats.minZ
+    quoX = maxX - minX
+    quoY = maxY - minY
+    quoZ = maxZ - minZ
     quoN = max(quoZ,max(quoX,quoY))
-    Stats.meanX = (Stats.maxX + Stats.minX)/2
-    Stats.meanY = (Stats.maxY + Stats.minY)/2
-    Stats.meanZ = (Stats.maxZ + Stats.minZ)/2
+    meanX = (maxX + minX)/2
+    meanY = (maxY + minY)/2
+    meanZ = (maxZ + minZ)/2
     for a in coords:
-        a[0] = -1+(a[0]-Stats.minX)*(1-(-1))/(quoN)
-        #print(a[0])
-        a[1] = -1+(a[1]-Stats.minY)*(1-(-1))/(quoN)
-        #print(a[1])
-        a[2] = -1+(a[2]-Stats.minZ)*(1-(-1))/(quoN)
-        #print(a[2])
-    
+	a[0] = -1+(a[0]-minX)*(1-(-1))/(quoN)
+	#print(a[0])
+	a[1] = -1+(a[1]-minY)*(1-(-1))/(quoN)
+	#print(a[1])
+	a[2] = -1+(a[2]-minZ)*(1-(-1))/(quoN)
+	#print(a[2])
+    atoms.setCoords(coords)
+
 
 def drawAtom(atom):
-    x = atom[0]
-    y = atom[1]
-    z = atom[2]
-    if(z > .5):
-      glColor3d(1,0,z)
-    elif(z < 0):
-      glColor3d(0,1,-z)
+    coords = atom.getCoords()
+    x = coords[0]
+    y = coords[1]
+    z = coords[2]
+    #print(x,y,z)
+    if(atom.iswater):
+      glColor3d(0,0,5)
+    elif(atom.isprotein):
+      glColor3d(0,5,0)
+    elif(atom.isoxygen):
+      glColor3d(5,0,0)
+    else:
+      glColor3d(0,1,1)
     glBegin(GL_POINTS)
-    glVertex3fv(atom)
+    glVertex3fv(coords)
     glEnd()  
 
 def draw():
+    global atoms
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
     glEnable(GL_DEPTH_TEST)
@@ -88,38 +108,37 @@ def draw():
       glPointSize(view_zoom)
     else:
       glPointSize(1.0)
-    for atom in coords:
-        drawAtom(atom)
+    for atom in atoms:
+      drawAtom(atom)
     glutSwapBuffers()
 
 def key(k, x, y):
     global view_zoom
     global spin_bool
     if k == 'z':
-        view_zoom += 1.0
+	view_zoom += 1.0
     elif k == 'Z':
-        view_zoom -= 1.0
+	view_zoom -= 1.0
     elif ord(k) == 27: # Escape
-        sys.exit(0)
+	sys.exit(0)
     elif ord(k) == 32:
-        spin_bool = not spin_bool
+	spin_bool = not spin_bool
     else:
-        return
+	return
     glutPostRedisplay()
 
 def special(k, x, y):
     global view_rotx, view_roty, view_rotz
-    
     if k == GLUT_KEY_UP:
-        view_rotx += 5.0
+	view_rotx += 5.0
     elif k == GLUT_KEY_DOWN:
-        view_rotx -= 5.0
+	view_rotx -= 5.0
     elif k == GLUT_KEY_LEFT:
-        view_roty += 5.0
+	view_roty += 5.0
     elif k == GLUT_KEY_RIGHT:
-        view_roty -= 5.0
+	view_roty -= 5.0
     else:
-        return
+	return
     glutPostRedisplay()
 
 def idle():
@@ -129,25 +148,6 @@ def idle():
   draw()
 
 def init():
-    for arg in sys.argv:
-	  print(arg)
-    try:
-      opts, args = getopt.getopt(sys.argv,"hlp", ["help","line","poly"])
-    except getopt.GetoptError:
-      print "Error. Try -h"
-      sys.exit(2)
-    for opt,arg in opts:
-      if opt in ("h","--help"):
-        print "the following are valid arguments: -h, -l, -p"
-        sys.exit()
-      elif opt in ("-l","--line"):
-        global line
-        line = True
-      elif opt in ("-p","--poly"):
-        global poly
-        poly = True
-    print(line)
-    print(poly)
     glutInit(sys.argv)
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH)
     glutInitWindowPosition(0, 0)
@@ -158,13 +158,39 @@ def init():
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     #gluLookAt(0.0,0.0,0.0, 0.5,0.5,1.0, 0.0,1.0,0.0)
-    gluPerspective(20.0,width/height,Stats.minZ-10,Stats.maxZ+10)
-    Scale()
+    #gluPerspective(20.0,width/height,minZ-10,maxZ+10)
+    
+
+def handleArgs(argv):
+    try:
+      opts, args = getopt.getopt(argv,"i:hls:", ["id=""help","line","seq="])
+    except getopt.GetoptError:
+      print "Error. Try -h"
+      sys.exit(2)
+    for opt,arg in opts:
+      if opt in ("-h","--help"):
+	print "the following are valid arguments: -i, -s, -h."
+	print "-i is required and must be followed by a valid protein ID."
+	print "-s is optional but must be followed by an amino acid sequence."
+	#print "-l is for a line-based rendering. Useful when combined with an amino acid sequence."
+      if opt in ("-i", "--id="):
+	Args.id = arg
+      if opt in ("-s","--seq="):
+	Args.seq = arg
+	Args.isSeq = True
+      #if opt in ("-l","--line"):
+	#Args.line = True
+
+
 
 if __name__ == '__main__':
 
 #initialize
+    handleArgs(sys.argv[1:])
+    atoms = getAtoms(Args.id)
+    Scale()
     init()
+    
     glutDisplayFunc(draw)
     glutKeyboardFunc(key)
     glutSpecialFunc(special)
